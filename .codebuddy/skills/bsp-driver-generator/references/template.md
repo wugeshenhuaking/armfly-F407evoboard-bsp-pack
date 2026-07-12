@@ -1,6 +1,6 @@
-# BSP 驱动文件模板（安富莱 V5 风格）
+# BSP Driver File Template (AnFuLi V5 Style)
 
-生成 `bsp_xxx.c` / `bsp_xxx.h` 时，将 `xxx` 替换为外设名（小写），`Xxx` 替换为首字母大写形式。
+When generating `bsp_xxx.c` / `bsp_xxx.h`, replace `xxx` with the peripheral name (lowercase) and `Xxx` with its capitalized form.
 
 ## bsp_xxx.c
 
@@ -8,16 +8,16 @@
 /*
 *********************************************************************************************************
 *
-*   模块名称 : XXX 驱动模块
-*   文件名称 : bsp_xxx.c
-*   版    本 : V1.0
-*   说    明 : 简要说明该外设驱动的功能、特性与使用方法。
+*   Module Name : XXX driver module
+*   File Name   : bsp_xxx.c
+*   Version     : V1.0
+*   Description : Brief description of the peripheral driver's features and usage.
 *
-*   修改记录 :
-*       版本号  日期        作者     说明
-*       V1.0    2026-xx-xx 用户     正式发布
+*   Revision History:
+*       Version   Date        Author   Description
+*       V1.0    2026-xx-xx  User     Initial release
 *
-*   Copyright (C), 2026, 安富莱电子 www.armfly.com
+*   Copyright (C), 2026, AnFuLi Electronics www.armfly.com
 *
 *********************************************************************************************************
 */
@@ -26,33 +26,53 @@
 
 /*
 *********************************************************************************************************
-*   函 数 名: bsp_InitXxx
-*   功能说明: 初始化 XXX 外设。该函数被 bsp_Init() 调用。
-*   形    参: 无
-*   返 回 值: 无
+*   Function   : bsp_InitXxx
+*   Description : Initialize the XXX peripheral. Entry point called by bsp_Init(),
+*                 it calls bsp_InitHardXxx() and bsp_InitVarXxx().
+*   Parameters : None
+*   Return      : None
 *********************************************************************************************************
 */
 void bsp_InitXxx(void)
 {
-    /* 第1步：打开外设时钟 */
-    /* 第2步：配置 GPIO / 外设寄存器 */
-    /* 第3步：设置缺省参数 */
+    /* Step 1: Hardware initialization (clock, GPIO, registers) */
+    bsp_InitHardXxx();
+
+    /* Step 2: Software variable / default state initialization */
+    bsp_InitVarXxx();
 }
 
 /*
 *********************************************************************************************************
-*   函 数 名: bsp_XxxScan10ms
-*   功能说明: 周期扫描 XXX。非阻塞，被 Systick 中断周期性调用，10ms 一次。
-*   形    参: 无
-*   返 回 值: 无
+*   Function   : bsp_InitHardXxx
+*   Description : Hardware initialization of XXX (enable clock, configure GPIO
+*                 and peripheral registers).
+*   Parameters : None
+*   Return      : None
 *********************************************************************************************************
 */
-void bsp_XxxScan10ms(void)
+void bsp_InitHardXxx(void)
 {
-    /* 需要周期处理的任务放在此处 */
+    /* Step 1: Enable peripheral clock */
+    /* Step 2: Configure GPIO / peripheral registers */
 }
 
-/***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
+/*
+*********************************************************************************************************
+*   Function   : bsp_InitVarXxx
+*   Description : Software initialization of XXX (initialize variables, set
+*                 default parameters and running state).
+*   Parameters : None
+*   Return      : None
+*********************************************************************************************************
+*/
+void bsp_InitVarXxx(void)
+{
+    /* Step 1: Initialize software variables and default parameters */
+}
+
+/***************************** AnFuLi Electronics www.armfly.com (END OF FILE) *********************************/
+
 ```
 
 ## bsp_xxx.h
@@ -61,12 +81,12 @@ void bsp_XxxScan10ms(void)
 /*
 *********************************************************************************************************
 *
-*   模块名称 : XXX 驱动模块
-*   文件名称 : bsp_xxx.h
-*   版    本 : V1.0
-*   说    明 : 头文件
+*   Module Name : XXX driver module
+*   File Name   : bsp_xxx.h
+*   Version     : V1.0
+*   Description : Header file
 *
-*   Copyright (C), 2026, 安富莱电子 www.armfly.com
+*   Copyright (C), 2026, AnFuLi Electronics www.armfly.com
 *
 *********************************************************************************************************
 */
@@ -74,19 +94,21 @@ void bsp_XxxScan10ms(void)
 #ifndef __BSP_XXX_H
 #define __BSP_XXX_H
 
-/* 本模块对外提供的函数声明 */
+/* Function declarations exposed to other modules */
 void bsp_InitXxx(void);
-void bsp_XxxScan10ms(void);
+void bsp_InitHardXxx(void);
+void bsp_InitVarXxx(void);
 
 #endif
 
-/***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
+/***************************** AnFuLi Electronics www.armfly.com (END OF FILE) *********************************/
+
 ```
 
-## 风格要点
-- 文件头"星框"：`*` 与内容间一个空格，边框用 105 个 `*`。
-- 函数注释块固定字段：`函 数 名`、`功能说明`、`形    参`、`返 回 值`。
-- 缩进：Tab 宽度 4，不混用空格。
-- 注释符号：`/* */`，不用 `//`。
-- 文件末尾：`END OF FILE` 行。
-- 编码：UTF-8 无 BOM；GB2312 源文件先转码再改（见 rules/encoding.md）。
+## Style Notes
+- File header "star box": one space between `*` and content; border uses 105 `*` characters.
+- Function comment block fixed fields: `Function`, `Description`, `Parameters`, `Return`.
+- Indentation: Tab, width 4; do not mix with spaces.
+- Comment style: `/* */`, not `//`; **all comments must be in English**.
+- End of file: `END OF FILE` line, followed by **one blank line**.
+- Encoding: UTF-8 without BOM; convert GB2312 sources before editing (see rules/encoding.md).

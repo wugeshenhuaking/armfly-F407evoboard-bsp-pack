@@ -1,9 +1,5 @@
 /*==========================================================================
- *  utility.h — 通用工具函数库
- *  适配说明:
- *    - 全部使用 <stdint.h> 标准类型
- *    - 变量定义在 utility.c, 此处仅 extern 声明
- *    - 适用于 STM32 Cortex-M3/M4 (含位带操作)
+ *  utility.h — General-purpose utility function library
  *==========================================================================*/
 #ifndef __UTILITY_H__
 #define __UTILITY_H__
@@ -11,38 +7,35 @@
 #include <stdint.h>
 
 /*==========================================================================
- *  常量定义
+ *  Constants
  *==========================================================================*/
 #ifndef PI
 #define PI              3.1415926535
 #endif
-
 #define DATA_POOL_SIZE  8192
 
 /*==========================================================================
- *  数据池
+ *  Data Pool
  *==========================================================================*/
 typedef struct {
     uint32_t size;
     uint32_t used_size;
     uint8_t  buf[DATA_POOL_SIZE];
-} DATA_POOL_T;
+} data_pool_t;
 
 /*==========================================================================
- *  全局变量 (定义于 utility.c)
- *  cnt_1ms / cnt_1ms_H / delay_k / g_p_data_pool / reserved
- *  放置在固定地址, 用于 Bootloader-APP 通信或汇编直接访问.
+ *  Global Variables (defined in utility.c)
  *==========================================================================*/
-extern DATA_POOL_T       g_data_pool;
+extern data_pool_t       g_data_pool;
 extern volatile uint32_t cnt_1ms;
 extern volatile uint32_t cnt_1ms_H;
 extern uint32_t          delay_k;
-extern DATA_POOL_T      *g_p_data_pool;
+extern data_pool_t      *g_p_data_pool;
 extern uint32_t          g_rnd0;
 extern uint8_t           reserved[12];
 
 /*==========================================================================
- *  硬件寄存器访问宏 (STM32 位带别名)
+ *  Hardware Register Access Macros (STM32 Bit-Band Aliases)
  *==========================================================================*/
 #define HWREG(x)        (*((volatile uint32_t *)(x)))
 #define HWREGH(x)       (*((volatile uint16_t *)(x)))
@@ -57,15 +50,14 @@ extern uint8_t           reserved[12];
 #define HWREGBITB(x, b) \
     HWREGB(((uint32_t)(x) & 0xF0000000) | 0x02000000 | \
            (((uint32_t)(x) & 0x000FFFFF) << 5) | ((b) << 2))
-
 #define REG_BIT(x, b) \
     (((uint32_t)(x) & 0xF0000000) | 0x02000000 | \
      (((uint32_t)(x) & 0x000FFFFF) << 5) | ((b) << 2))
 
-typedef volatile uint32_t BITBAND_T;
+typedef volatile uint32_t bitband_t;
 
 /*==========================================================================
- *  GPIO 辅助宏 (需自行包含对应芯片的 GPIO 驱动头文件)
+ *  GPIO Helper Macros (requires chip-specific GPIO header)
  *==========================================================================*/
 #define TstB(A, B)  ((A & (1 << (B))) != 0)
 #define SetGB(A)    GPIO_SetBits(A)
@@ -74,10 +66,10 @@ typedef volatile uint32_t BITBAND_T;
 #define RdGB(A)     GPIO_ReadInputDataBit(A)
 #define WrGB(A, B)  GPIO_WriteBit(A, B)
 
-typedef void (*GpioOut_T)(uint8_t pinsta);
+typedef void (*gpio_out_t)(uint8_t pinsta);
 
 /*==========================================================================
- *  字节序 / 缓冲区操作
+ *  Byte-Order / Buffer Operations
  *==========================================================================*/
 uint16_t  char_hl_short(uint8_t hi, uint8_t lo);
 void      short_copy_xch(void *t, const void *s, int n, uint8_t b_xch);
@@ -87,10 +79,9 @@ uint8_t  *short_wr_buf_xch(uint8_t *buf, uint16_t s);
 uint16_t  short_rd_buf_xch(const uint8_t *buf);
 
 /*==========================================================================
- *  IAP 跳转
+ *  IAP Jump
  *==========================================================================*/
-typedef void (*Function_T)(void);
-
+typedef void (*function_t)(void);
 void jump_to_app(uint32_t ApplicationAddress);
 
 #define m_jump_to_app_disallint(A) do { \
@@ -102,13 +93,13 @@ void jump_to_app(uint32_t ApplicationAddress);
 } while(0)
 
 /*==========================================================================
- *  延时
+ *  Delay
  *==========================================================================*/
 void delay_us_init(uint32_t sys_freq_hz);
 void delay_us(uint32_t us);
 
 /*==========================================================================
- *  位带操作 (Cortex-M3/M4)
+ *  Bit-Band Operations (Cortex-M3/M4)
  *==========================================================================*/
 uint32_t *calc_bitadr(void *x, uint8_t b);
 void      bitband_set(void *p, uint8_t b);
@@ -117,7 +108,7 @@ void      bitband_toggle(void *p, uint8_t b);
 uint8_t   bitband_tsc(void *p, uint8_t b);
 
 /*==========================================================================
- *  便捷宏
+ *  Convenience Macros
  *==========================================================================*/
 #define HRL(x)          ((x) & 0xFF)
 #define HRH(x)          ((x) >> 8)
@@ -129,7 +120,7 @@ uint8_t   bitband_tsc(void *p, uint8_t b);
 #define U8_TstB(A, bit) TST_BIT(A, bit)
 
 /*==========================================================================
- *  汇编位操作 (STM32F103_HW_ASM.S, Cortex-M0 无位带时使用)
+ *  Assembly Bit Operations (STM32F103_HW_ASM.S, for Cortex-M0 without bit-band)
  *==========================================================================*/
 void     _U32_SetB(uint32_t *x, uint8_t b);
 void     _U16_SetB(uint16_t *x, uint8_t b);
@@ -146,7 +137,6 @@ uint8_t  _U8_TscB(uint8_t *x, uint8_t b);
 uint16_t _short_xch_hl(uint16_t i);
 
 #ifdef MCU_CORE_M0
-/* Cortex-M0: 无位带, 使用汇编函数 */
 #define u32_setb    _U32_SetB
 #define u16_setb    _U16_SetB
 #define u8_setb     _U8_SetB
@@ -160,7 +150,6 @@ uint16_t _short_xch_hl(uint16_t i);
 #define u16_tscb    _U16_TscB
 #define u8_tscb     _U8_TscB
 #else
-/* Cortex-M3/M4: 有位带, 使用位带别名操作 */
 #define u32_setb    bitband_set
 #define u16_setb    bitband_set
 #define u8_setb     bitband_set
@@ -176,40 +165,28 @@ uint16_t _short_xch_hl(uint16_t i);
 #endif
 
 /*==========================================================================
- *  毫秒定时器
- *
- *  定时器值含义:
- *    0    → 未运行
- *    非零 → 到期时刻的 cnt_1ms 绝对值
- *
- *  到期判断 (无符号回绕):
- *    diff = deadline - cnt_1ms
- *    diff 的 bit31 = 1 → 已过期
- *    diff 的 bit31 = 0 → 未过期, diff 即剩余毫秒
- *
- *  最大可定时时长: 2^31 ms ≈ 24.8 天
+ *  Millisecond Timer
+ *  Value 0  => not running; nonzero => absolute cnt_1ms expiry time
+ *  Maximum duration: 2^31 ms ≈ 24.8 days
  *==========================================================================*/
 typedef uint32_t time_ms_t;
 
 void    left_ms_set(time_ms_t *p, uint32_t val);
-int32_t left_ms_sta(time_ms_t *p);         /* 到期首次返回0, 之后返回-1 */
-int32_t left_ms(time_ms_t *p);             /* 到期返回0 */
+int32_t left_ms_sta(const time_ms_t *p);
+int32_t left_ms(time_ms_t *p);
 void    left_ms_stop(time_ms_t *p);
 int32_t left_ms_running(const time_ms_t *p);
 
 /*==========================================================================
- *  JSON 简易解析
- *  支持格式: {"key":"str_val"} 或 {"key":123}
- *  注意: 做全字匹配 (检查键名前后双引号), 可正确跳过子串,
- *        如 {"username":"a","name":"b"} 中搜索 "name" 不会误匹配 "username".
+ *  Simple JSON Parser
  *==========================================================================*/
 #define GET_JSON_1FS_FAIL   0
 int get_json_1fs(char *buf, int buf_size, const char *s, const char *name);
 
 /*==========================================================================
- *  HEX <-> 字符串转换
+ *  HEX <-> String Conversion
  *==========================================================================*/
-#define STR_TO_HEX_FAIL     0
+#define STR_TO_HEX_FAIL     (-1)
 #define STR_TO_HEX_SUCCESS  1
 
 int      hexchar_byte(uint8_t ch);
@@ -218,47 +195,46 @@ int      nstr_to_hex(uint8_t *buf, const char *s, uint32_t n);
 void     hex_to_str(char *str_buf, const uint8_t *hex_buf, uint32_t hex_n);
 
 /*==========================================================================
- *  字符串工具
+ *  String Utilities
  *==========================================================================*/
 void str2lwr(char *p);
 void str2upr(char *p);
 
 /*==========================================================================
- *  日历 / 时间转换 (Unix 时间戳, 1970-01-01 起)
- *  注意: 闰年仅用 4 年一闰, 未完全实现百年/四百年规则,
- *        2100 年之后可能有 ±1 天偏差.
+ *  Calendar / Time
  *==========================================================================*/
 typedef struct {
-    uint16_t year;      /* 1970-9999 */
-    uint8_t  month;     /* 1-12 */
-    uint8_t  day;       /* 1-31 */
-    uint8_t  hour;      /* 0-23 */
-    uint8_t  min;       /* 0-59 */
-    uint8_t  sec;       /* 0-59 */
-    uint8_t  week;      /* 1-7 (1=周一) */
-    uint32_t sec1970;   /* Unix 时间戳 */
-} CALENDAR_T;
+    uint16_t year;
+    uint8_t  month;
+    uint8_t  day;
+    uint8_t  hour;
+    uint8_t  min;
+    uint8_t  sec;
+    uint8_t  week;
+    uint32_t sec1970;
+} calendar_t;
 
 #define CALENDAR_SUCCESS    0
 #define CALENDAR_FAIL      (-1)
 
-int  calendar_int(CALENDAR_T *p);   /* 日历 → 时间戳 */
-void int_calendar(CALENDAR_T *p);   /* 时间戳 → 日历 */
+int  calendar_int(calendar_t *p);
+void int_calendar(calendar_t *p);
 
 /*==========================================================================
- *  数值格式化
+ *  Numeric Formatting
  *==========================================================================*/
-int  Dword2Str(char *s, uint32_t data, uint8_t i_nb, uint8_t dec_nb,
-               uint8_t b_sign, uint8_t b_inv0);
-void Short_BinStr(char *buf, uint16_t us);
+int  dword_to_str(char *s, uint32_t data, uint8_t i_nb, uint8_t dec_nb,
+                  uint8_t b_sign, uint8_t b_inv0);
+void short_bin_str(char *buf, uint16_t us);
 
 /*==========================================================================
- *  数据池分配 (简单线性分配器, 不支持释放)
+ *  Data Pool Allocation
  *==========================================================================*/
-uint8_t *DataPool_Get(uint32_t size);
+uint8_t *data_pool_get(uint32_t size);
+void     data_pool_reset(void);
 
 /*==========================================================================
- *  ASC <-> 整型转换
+ *  ASC <-> Integer Conversion
  *==========================================================================*/
 #define ASC2INT_SUCCESS 1
 #define ASC2INT_FAIL    0
@@ -266,34 +242,34 @@ uint8_t *DataPool_Get(uint32_t size);
 int      digchar_byte(uint8_t ch);
 int      asc2int_dft(const char *p, int dft);
 int64_t  asc2s64_dft(const char *p, int64_t dft);
-int      asc2int(const char *p, int *result);       /* 返回转换值, *result 表示成败 */
-int      asc2s64(int64_t *result, const char *p);   /* 成功写入 *result 并返回1 */
+int      asc2int(const char *p, int *result);
+int      asc2s64(int64_t *result, const char *p);
 
 /*==========================================================================
- *  函数传递表
+ *  Function Dispatch Table
  *==========================================================================*/
 typedef struct {
     const char *func_name;
     uint32_t    func_adr;
-} FUNC_TB_T;
+} func_tb_t;
 
-uint32_t Get_Func(FUNC_TB_T *func_tb, const char *func_name);
+uint32_t get_func(func_tb_t *func_tb, const char *func_name);
 
 /*==========================================================================
- *  通讯缓冲区
+ *  Communication Buffer
  *==========================================================================*/
 typedef struct {
     uint8_t  *buf;
     uint16_t  n;
     uint16_t  size;
-} COMM_BUF_T;
+} comm_buf_t;
 
-int  comm_buf_del_n(COMM_BUF_T *p, uint16_t n);
-void comm_buf_del_all(COMM_BUF_T *p);
+int  comm_buf_del_n(comm_buf_t *p, uint16_t n);
+void comm_buf_del_all(comm_buf_t *p);
 
 /*==========================================================================
- *  随机数 (伪随机, 基于 LCG)
+ *  Random Number
  *==========================================================================*/
-uint32_t MyRnd(void);
+uint32_t my_rnd(void);
 
 #endif /* __UTILITY_H__ */

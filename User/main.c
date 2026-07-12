@@ -25,6 +25,7 @@
 *********************************************************************************************************
 */
 #include "bsp.h"            /* Hardware abstraction layer */
+#include "utility.h"       /* General utility functions */
 
 /* Define example name and release date */
 #define EXAMPLE_NAME    "V5-Running LED"
@@ -42,39 +43,56 @@ static void PrintfHelp(void);
 *   Return: Error code (no action required)
 *********************************************************************************************************
 */
+
+typedef struct
+{
+    time_ms_t timer;
+} task_led_t;
+
+task_led_t led_task = {0};
+
+void app_task_led_init(task_led_t *task)
+{
+    left_ms_set(&task->timer, 500);
+}
+
+void app_task_led(task_led_t *task)
+{
+    if(left_ms(&task->timer))
+    {
+        return;
+    }
+
+    // LED task logic here
+    bsp_LedToggle(1);
+    printf("LED1 toggled\r\n");
+    left_ms_set(&task->timer, 500);
+}
+
 int main(void)
 {
     bsp_Init();     /* Hardware initialization */
     PrintfLogo();   /* Print example name and version info */
     PrintfHelp();   /* Print operation tips */
     /* Brief LED1 blink to indicate startup */
-    bsp_LedOn(1);
-    bsp_DelayMS(100);
-    bsp_LedOff(1);
-    bsp_DelayMS(100);
-    bsp_StartAutoTimer(0, 100); /* Start a 100ms auto-reload timer */
-    bsp_StartAutoTimer(1, 500); /* Start a 500ms auto-reload timer */
+    // bsp_LedOn(1);
+    // bsp_DelayMS(100);
+    // bsp_LedOff(1);
+    // bsp_DelayMS(100);
+    // bsp_StartAutoTimer(0, 100); /* Start a 100ms auto-reload timer */
+    // bsp_StartAutoTimer(1, 500); /* Start a 500ms auto-reload timer */
+
+    app_task_led_init(&led_task);
+
     /* Enter main loop */
     while (1)
     {
         bsp_Idle();     /* This function is in bsp.c. Users can modify it for CPU sleep and watchdog feeding */
-        /* Check timer timeout */
-        if (bsp_CheckTimer(0))
-        {
-            /* Enter here every 100ms */
-            bsp_LedToggle(1);
-        }
-        /* Check timer timeout */
-        if (bsp_CheckTimer(1))
-        {
-            /* Enter here every 500ms */
-            bsp_LedToggle(2);
-            bsp_LedToggle(3);
-            bsp_LedToggle(4);
-            printf("test\n");
-        }
+        app_task_led(&led_task);
     }
 }
+
+
 
 /*
 *********************************************************************************************************
@@ -110,7 +128,7 @@ static void PrintfLogo(void)
         CPU_Sn1 = *(__IO uint32_t*)(0x1FFF7A10 + 4);
         CPU_Sn2 = *(__IO uint32_t*)(0x1FFF7A10 + 8);
         printf("\r\nCPU : STM32F407IGT6, LQFP176, Clock: %dMHz\r\n", SystemCoreClock / 1000000);
-        printf("UID = %08X %08X %08X\n\r", CPU_Sn2, CPU_Sn1, CPU_Sn0);
+        printf("UID = 0x%08X 0x%08X 0x%08X\n\r", CPU_Sn2, CPU_Sn1, CPU_Sn0);
     }
     printf("*************************************************************\n");
     printf("* Project    : %s\r\n", EXAMPLE_NAME);

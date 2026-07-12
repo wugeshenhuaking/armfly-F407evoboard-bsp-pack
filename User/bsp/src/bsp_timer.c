@@ -420,14 +420,17 @@ int32_t bsp_CheckRunTime(int32_t _LastTime)
 *   返 回 值: 无
 *********************************************************************************************************
 */
+
+#include "utility.h"
 void SysTick_Handler(void)
 {
     HAL_IncTick(); /* ST HAL库的滴答定时中断服务程序 */
-    if (g_ucEnableSystickISR == 0)
-    {
-        return;
-    }
-    SysTick_ISR(); /* 安富莱bsp库的滴答定时中断服务程序 */
+    // if (g_ucEnableSystickISR == 0)
+    // {
+    //     return;
+    // }
+    // SysTick_ISR(); /* 安富莱bsp库的滴答定时中断服务程序 */
+    cnt_1ms++;
 }
 
 /*
