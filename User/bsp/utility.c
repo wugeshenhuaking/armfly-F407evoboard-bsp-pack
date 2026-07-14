@@ -9,13 +9,21 @@
  *==========================================================================*/
 data_pool_t g_data_pool = { DATA_POOL_SIZE, 0, {0} };
 
-volatile uint32_t cnt_1ms       __attribute__((section(".ARM.__at_0x20000000")));
-volatile uint32_t cnt_1ms_H     __attribute__((section(".ARM.__at_0x20000004")));
-uint32_t          delay_k       __attribute__((section(".ARM.__at_0x20000008")));
-data_pool_t      *g_p_data_pool __attribute__((section(".ARM.__at_0x2000000C"))) = &g_data_pool;
-uint32_t          g_rnd0;
-uint8_t           reserved[12]  __attribute__((section(".ARM.__at_0x20000014")));
+//volatile uint32_t cnt_1ms       __attribute__((section(".ARM.__at_0x20000000")));
+//volatile uint32_t cnt_1ms_H     __attribute__((section(".ARM.__at_0x20000004")));
+//uint32_t          delay_k       __attribute__((section(".ARM.__at_0x20000008")));
+//data_pool_t      *g_p_data_pool __attribute__((section(".ARM.__at_0x2000000C"))) = &g_data_pool;
+//uint32_t          g_rnd0;
+//uint8_t           reserved[12]  __attribute__((section(".ARM.__at_0x20000014")));
 
+
+
+volatile uint32_t cnt_1ms;
+volatile uint32_t cnt_1ms_H;
+uint32_t          delay_k;
+data_pool_t      *g_p_data_pool= &g_data_pool;
+uint32_t          g_rnd0;
+uint8_t           reserved[12];
 /*==========================================================================
  *  Byte-Order / Buffer Operations
  *==========================================================================*/

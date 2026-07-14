@@ -62,36 +62,96 @@ void app_task_led(task_led_t *task)
     {
         return;
     }
-
     // LED task logic here
     bsp_LedToggle(1);
     printf("LED1 toggled\r\n");
     left_ms_set(&task->timer, 500);
 }
 
+static void JumpToBootloader(void);
+
+
 int main(void)
 {
     bsp_Init();     /* Hardware initialization */
     PrintfLogo();   /* Print example name and version info */
     PrintfHelp();   /* Print operation tips */
-    /* Brief LED1 blink to indicate startup */
-    // bsp_LedOn(1);
-    // bsp_DelayMS(100);
-    // bsp_LedOff(1);
-    // bsp_DelayMS(100);
-    // bsp_StartAutoTimer(0, 100); /* Start a 100ms auto-reload timer */
-    // bsp_StartAutoTimer(1, 500); /* Start a 500ms auto-reload timer */
-
     app_task_led_init(&led_task);
-
+    static volatile uint8_t jump_flag = 0;
     /* Enter main loop */
     while (1)
     {
         bsp_Idle();     /* This function is in bsp.c. Users can modify it for CPU sleep and watchdog feeding */
         app_task_led(&led_task);
+        if(jump_flag)
+        {
+            JumpToBootloader();
+        }
     }
 }
 
+static void JumpToBootloader(void)
+{
+    uint32_t i = 0;
+    void (*SysMemBootJump)(void);        /* Declare a function pointer */
+    __IO uint32_t BootAddr = 0x1FFF0000; /* System BootLoader address of STM32F4 */
+    /* Disable global interrupts */
+    DISABLE_INT();
+    /* Disable SysTick timer and reset it to default values */
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+    /* Reset all clocks to default state, switch to HSI clock */
+    HAL_RCC_DeInit();
+    /* Disable all interrupts and clear all pending interrupt flags */
+    for (i = 0; i < 8; i++)
+    {
+        NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+    /* Enable global interrupts */
+    ENABLE_INT();
+    /* Jump to system BootLoader: first word is MSP, offset +4 is reset handler address */
+    SysMemBootJump = (void (*)(void)) (*((uint32_t *) (BootAddr + 4)));
+#if defined(__ARMCC_VERSION) && (__ARMCC_VERSION < 6000000)
+    /*
+     * AC5 (ARMCC):
+     *   AC5 recognizes SysMemBootJump() as a tail call and generates a plain
+     *   BX instruction without touching the stack, so the CMSIS helpers are fine.
+     */
+    __set_MSP(*(uint32_t *)BootAddr);
+    __DSB();
+    __ISB();
+
+    __set_CONTROL(0);
+    __DSB();
+    __ISB();
+    SysMemBootJump();
+#elif defined(__clang__) || defined(__GNUC__)
+    /*
+     * AC6 (ARMCLANG / Clang):
+     *   AC6 does NOT treat SysMemBootJump() as a tail call; it inserts PUSH/POP
+     *   after __set_MSP. By then MSP already points into system memory, so the
+     *   stack write triggers a BusFault. Use inline asm to guarantee that no
+     *   stack operation is inserted between MSR MSP -> MSR CONTROL -> BX.
+     */
+    __ASM volatile (
+        "msr msp, %0\n"       /* Set main stack pointer (MSP) */
+        "msr control, %1\n"   /* CONTROL=0: privileged mode + use MSP */
+        "isb\n"               /* Instruction synchronization barrier, flush pipeline */
+        "bx %2\n"             /* Jump to system BootLoader */
+        :
+        : "r" (*(uint32_t *)BootAddr), "r" ((uint32_t)0), "r" (SysMemBootJump)
+        : "memory"
+    );
+#else
+#error "Unsupported compiler — jump_to_app requires inline assembly to set MSP"
+#endif
+    /* If the jump succeeds, code never reaches here; user may add code below */
+    while (1)
+    {
+    }
+}
 
 
 /*
