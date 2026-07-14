@@ -10,8 +10,8 @@
       <TargetName>Flash</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060750::V5.06 update 6 (build 750)::.\ARMCC5</pCCUsed>
-      <uAC6>0</uAC6>
+      <pCCUsed>6230000::V6.23::ARMCLANG</pCCUsed>
+      <uAC6>1</uAC6>
       <TargetOption>
         <TargetCommonOption>
           <Device>STM32F407ZGTx</Device>
@@ -323,7 +323,7 @@
             <PlainCh>0</PlainCh>
             <Ropi>0</Ropi>
             <Rwpi>0</Rwpi>
-            <wLevel>2</wLevel>
+            <wLevel>3</wLevel>
             <uThumb>0</uThumb>
             <uSurpInc>0</uSurpInc>
             <uC99>1</uC99>
@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER, STM32F407xx,USE_FULL_LL_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_HAL_Driver\Inc;..\..\Libraries\STM32F4xx_HAL_Driver\Src\Legacy;..\..\User\bsp\inc;..\..\User;..\..\User\bsp</IncludePath>
+              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_HAL_Driver\Inc;..\..\Libraries\STM32F4xx_HAL_Driver\Src\Legacy;..\..\User\bsp\inc;..\..\User;..\..\User\bsp;..\..\Components\CherryUSB;..\..\Components\CherryUSB\core;..\..\Components\CherryUSB\common;..\..\Components\CherryUSB\port\dwc2;..\..\Components\CherryUSB\class\cdc;..\..\Components\CherryUSB\class\hub;..\..\Components\CherryUSB\class\hid;..\..\User\user_task</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -439,6 +439,11 @@
               <FileType>5</FileType>
               <FilePath>..\..\User\bsp\utility.h</FilePath>
             </File>
+            <File>
+              <FileName>bsp_usb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\bsp\src\bsp_usb.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -509,6 +514,26 @@
               <FileType>1</FileType>
               <FilePath>..\..\Libraries\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_flash_ex.c</FilePath>
             </File>
+            <File>
+              <FileName>stm32f4xx_hal_pcd.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_pcd.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_hal_pcd_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_pcd_ex.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_ll_usb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32F4xx_HAL_Driver\Src\stm32f4xx_ll_usb.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_ll_utils.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32F4xx_HAL_Driver\Src\stm32f4xx_ll_utils.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -568,6 +593,272 @@
               <FileName>06.GPIO分配表(按功能排列).txt</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\Doc\06.GPIO分配表(按功能排列).txt</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/port</GroupName>
+          <Files>
+            <File>
+              <FileName>usb_dc_dwc2.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\port\dwc2\usb_dc_dwc2.c</FilePath>
+            </File>
+            <File>
+              <FileName>usb_dwc2_param.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\port\dwc2\usb_dwc2_param.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_dwc2_reg.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\port\dwc2\usb_dwc2_reg.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_glue_st.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\port\dwc2\usb_glue_st.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/user-config</GroupName>
+          <Files>
+            <File>
+              <FileName>usb_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\usb_config.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/core</GroupName>
+          <Files>
+            <File>
+              <FileName>usbd_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\core\usbd_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_core.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\core\usbd_core.h</FilePath>
+            </File>
+            <File>
+              <FileName>usbotg_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\core\usbotg_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbotg_core.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\core\usbotg_core.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/common</GroupName>
+          <Files>
+            <File>
+              <FileName>usb_dc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_dc.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_dcache.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_dcache.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_def.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_def.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_errno.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_errno.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_hc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_hc.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_list.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_list.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_log.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_log.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_memcpy.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_memcpy.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_mempool.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_mempool.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_osal.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_osal.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_otg.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_otg.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_ringbuffer.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_ringbuffer.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_util.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_util.h</FilePath>
+            </File>
+            <File>
+              <FileName>usb_version.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\common\usb_version.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/cdc</GroupName>
+          <Files>
+            <File>
+              <FileName>usb_cdc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usb_cdc.h</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_cdc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usbd_cdc.h</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_cdc_acm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usbd_cdc_acm.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_cdc_acm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usbd_cdc_acm.h</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_cdc_ecm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usbd_cdc_ecm.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_cdc_ecm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\cdc\usbd_cdc_ecm.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/hid</GroupName>
+          <Files>
+            <File>
+              <FileName>usb_hid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\hid\usb_hid.h</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_hid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\hid\usbd_hid.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_hid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Components\CherryUSB\class\hid\usbd_hid.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Component/cherryUSB/demo</GroupName>
+          <Files>
+            <File>
+              <FileName>webusb_hid_template.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Components\CherryUSB\demo\webusb_hid_template.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>0</IncludeInBuild>
+                  <AlwaysBuild>0</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Task_USB</GroupName>
+          <Files>
+            <File>
+              <FileName>task_usb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\user_task\task_usb.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_usb.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\user_task\task_usb.h</FilePath>
             </File>
           </Files>
         </Group>

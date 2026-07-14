@@ -108,7 +108,7 @@ void bsp_InitVarXxx(void);
 ## Style Notes
 - File header "star box": one space between `*` and content; border uses 105 `*` characters.
 - Function comment block fixed fields: `Function`, `Description`, `Parameters`, `Return`.
-- Indentation: Tab, width 4; do not mix with spaces.
+- Indentation: 4 spaces; tabs are forbidden (use spaces only, no `\t` characters).
 - Comment style: `/* */`, not `//`; **all comments must be in English**.
 - End of file: `END OF FILE` line, followed by **one blank line**.
 - Encoding: UTF-8 without BOM; convert GB2312 sources before editing (see rules/encoding.md).

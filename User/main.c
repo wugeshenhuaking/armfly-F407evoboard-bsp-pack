@@ -26,7 +26,7 @@
 */
 #include "bsp.h"            /* Hardware abstraction layer */
 #include "utility.h"       /* General utility functions */
-
+#include "task_usb.h"
 /* Define example name and release date */
 #define EXAMPLE_NAME    "V5-Running LED"
 #define EXAMPLE_DATE    "2019-04-23"
@@ -78,6 +78,10 @@ int main(void)
     PrintfHelp();   /* Print operation tips */
     app_task_led_init(&led_task);
     static volatile uint8_t jump_flag = 0;
+    
+    webusb_hid_keyboard_init(0, USB_OTG_FS_PERIPH_BASE);
+
+    
     /* Enter main loop */
     while (1)
     {

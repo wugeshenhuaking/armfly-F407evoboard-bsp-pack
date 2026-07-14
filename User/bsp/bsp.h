@@ -73,6 +73,7 @@
 #include "bsp_timer.h"
 #include "bsp_led.h"
 #include "bsp_key.h"
+#include "bsp_usb.h"
 
 //#include "bsp_cpu_rtc.h"
 //#include "bsp_cpu_adc.h"
