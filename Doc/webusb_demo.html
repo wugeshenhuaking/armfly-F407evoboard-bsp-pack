@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>CherryUSB WebUSB 数据接收</title>
+</head>
+<body>
+    <h1>CherryUSB WebUSB 数据接收</h1>
+    <p>注意：WebUSB 需要在安全上下文（https 或 http://localhost）下运行。
+       请用 <code>python -m http.server</code> 在本目录起一个本地服务，再用 Chrome/Edge 打开。</p>
+    <button id="connect">连接 USB 设备</button>
+    <button id="read" disabled>开始接收</button>
+    <button id="send">发送测试(0x00~0x0F)</button>
+    <pre id="log"></pre>
+
+    <script>
+        // 需与固件中的 VID/PID 保持一致（task_usb.c: USBD_VID / USBD_PID）
+        const VID = 0xffff;
+        const PID = 0xffff;
+        const WEBUSB_INTERFACE = 1;   // WebUSB 厂商接口号
+        const IN_EP  = 2;             // 0x82 -> 端点号 2, IN
+        const OUT_EP = 2;             // 0x02 -> 端点号 2, OUT
+
+        let device = null;
+        const log = document.getElementById('log');
+        function println(s) {
+            log.textContent += s + '\n';
+            log.scrollTop = log.scrollHeight;
+        }
+
+        document.getElementById('connect').onclick = async () => {
+            try {
+                device = await navigator.usb.requestDevice({
+                    filters: [{ vendorId: VID, productId: PID }]
+                });
+                await device.open();
+                if (device.configuration === null) {
+                    await device.selectConfiguration(1);
+                }
+                await device.claimInterface(WEBUSB_INTERFACE);
+                println('已连接: ' + (device.productName || 'unknown'));
+                document.getElementById('read').disabled = false;
+                document.getElementById('send').disabled = false;
+            } catch (e) {
+                println('连接失败: ' + e);
+            }
+        };
+
+        // 持续从 WebUSB 批量 IN 端点读取设备发来的数据
+        document.getElementById('read').onclick = async () => {
+            try {
+                while (true) {
+                    const result = await device.transferIn(IN_EP, 64);
+                    const data = new Uint8Array(result.data.buffer);
+                    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                    println('收到 ' + data.length + ' 字节: ' + hex);
+                }
+            } catch (e) {
+                println('接收错误: ' + e);
+            }
+        };
+
+        // 向设备发送一帧测试数据（经 WebUSB 批量 OUT 端点）
+        document.getElementById('send').onclick = async () => {
+            try {
+                const tx = new Uint8Array(16);
+                for (let i = 0; i < 16; i++) tx[i] = i;
+                await device.transferOut(OUT_EP, tx);
+                println('已发送 16 字节到设备');
+            } catch (e) {
+                println('发送失败: ' + e);
+            }
+        };
+    </script>
+</body>
+</html>

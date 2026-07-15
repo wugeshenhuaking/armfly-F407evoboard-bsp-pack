@@ -24,13 +24,13 @@
 *
 *********************************************************************************************************
 */
-#include "bsp.h"            /* Hardware abstraction layer */
-#include "utility.h"       /* General utility functions */
+#include "bsp.h"     /* Hardware abstraction layer */
+#include "utility.h" /* General utility functions */
 #include "task_usb.h"
 /* Define example name and release date */
-#define EXAMPLE_NAME    "V5-Running LED"
-#define EXAMPLE_DATE    "2019-04-23"
-#define DEMO_VER        "1.0"
+#define EXAMPLE_NAME "V5-Running LED"
+#define EXAMPLE_DATE "2019-04-23"
+#define DEMO_VER "1.0"
 
 static void PrintfLogo(void);
 static void PrintfHelp(void);
@@ -58,39 +58,41 @@ void app_task_led_init(task_led_t *task)
 
 void app_task_led(task_led_t *task)
 {
-    if(left_ms(&task->timer))
+    uint8_t buf[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+
+    if (left_ms(&task->timer))
     {
         return;
     }
     // LED task logic here
     bsp_LedToggle(1);
+    // hid_keyboard_test(0);
+    webusb_send_data(0, buf, 8);   /* busid = 0 */
     printf("LED1 toggled\r\n");
     left_ms_set(&task->timer, 500);
 }
 
 static void JumpToBootloader(void);
 
-
 int main(void)
 {
-    bsp_Init();     /* Hardware initialization */
-    PrintfLogo();   /* Print example name and version info */
-    PrintfHelp();   /* Print operation tips */
+    bsp_Init();   /* Hardware initialization */
+    PrintfLogo(); /* Print example name and version info */
+    PrintfHelp(); /* Print operation tips */
     app_task_led_init(&led_task);
     static volatile uint8_t jump_flag = 0;
-    
+
     webusb_hid_keyboard_init(0, USB_OTG_FS_PERIPH_BASE);
 
-    
     /* Enter main loop */
     while (1)
     {
-        bsp_Idle();     /* This function is in bsp.c. Users can modify it for CPU sleep and watchdog feeding */
-        app_task_led(&led_task);
-        if(jump_flag)
-        {
-            JumpToBootloader();
-        }
+        bsp_Idle(); /* This function is in bsp.c. Users can modify it for CPU sleep and watchdog feeding */
+        app_task_led(&led_task); 
+    //    if (jump_flag)
+    //    {
+    //        JumpToBootloader();
+    //    }
     }
 }
 
@@ -116,7 +118,7 @@ static void JumpToBootloader(void)
     /* Enable global interrupts */
     ENABLE_INT();
     /* Jump to system BootLoader: first word is MSP, offset +4 is reset handler address */
-    SysMemBootJump = (void (*)(void)) (*((uint32_t *) (BootAddr + 4)));
+    SysMemBootJump = (void (*)(void))(*((uint32_t *)(BootAddr + 4)));
 #if defined(__ARMCC_VERSION) && (__ARMCC_VERSION < 6000000)
     /*
      * AC5 (ARMCC):
@@ -139,15 +141,13 @@ static void JumpToBootloader(void)
      *   stack write triggers a BusFault. Use inline asm to guarantee that no
      *   stack operation is inserted between MSR MSP -> MSR CONTROL -> BX.
      */
-    __ASM volatile (
-        "msr msp, %0\n"       /* Set main stack pointer (MSP) */
-        "msr control, %1\n"   /* CONTROL=0: privileged mode + use MSP */
-        "isb\n"               /* Instruction synchronization barrier, flush pipeline */
-        "bx %2\n"             /* Jump to system BootLoader */
-        :
-        : "r" (*(uint32_t *)BootAddr), "r" ((uint32_t)0), "r" (SysMemBootJump)
-        : "memory"
-    );
+    __ASM volatile(
+        "msr msp, %0\n"     /* Set main stack pointer (MSP) */
+        "msr control, %1\n" /* CONTROL=0: privileged mode + use MSP */
+        "isb\n"             /* Instruction synchronization barrier, flush pipeline */
+        "bx %2\n"           /* Jump to system BootLoader */
+        : : "r"(*(uint32_t *)BootAddr),
+        "r"((uint32_t)0), "r"(SysMemBootJump) : "memory");
 #else
 #error "Unsupported compiler — jump_to_app requires inline assembly to set MSP"
 #endif
@@ -156,7 +156,6 @@ static void JumpToBootloader(void)
     {
     }
 }
-
 
 /*
 *********************************************************************************************************
@@ -188,9 +187,9 @@ static void PrintfLogo(void)
     /* Read CPU ID */
     {
         uint32_t CPU_Sn0, CPU_Sn1, CPU_Sn2;
-        CPU_Sn0 = *(__IO uint32_t*)(0x1FFF7A10);
-        CPU_Sn1 = *(__IO uint32_t*)(0x1FFF7A10 + 4);
-        CPU_Sn2 = *(__IO uint32_t*)(0x1FFF7A10 + 8);
+        CPU_Sn0 = *(__IO uint32_t *)(0x1FFF7A10);
+        CPU_Sn1 = *(__IO uint32_t *)(0x1FFF7A10 + 4);
+        CPU_Sn2 = *(__IO uint32_t *)(0x1FFF7A10 + 8);
         printf("\r\nCPU : STM32F407IGT6, LQFP176, Clock: %dMHz\r\n", SystemCoreClock / 1000000);
         printf("UID = 0x%08X 0x%08X 0x%08X\n\r", CPU_Sn2, CPU_Sn1, CPU_Sn0);
     }
@@ -210,4 +209,3 @@ static void PrintfLogo(void)
 }
 
 /***************************** www.armfly.com (END OF FILE) *********************************/
-

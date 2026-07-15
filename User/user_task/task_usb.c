@@ -14,6 +14,14 @@
 
 #define WEBUSB_INTF_NUM 0x01
 
+#define WEBUSB_IN_EP    0x82
+#define WEBUSB_OUT_EP   0x02
+#ifdef CONFIG_USB_HS
+#define WEBUSB_EP_MPS   512
+#else
+#define WEBUSB_EP_MPS   64
+#endif
+
 #define WEBUSB_URL_STRINGS                                 \
     'g', 'i', 't', 'h', 'u', 'b', '.', 'c', 'o', 'm', '/', \
         'c', 'h', 'e', 'r', 'r', 'y', '-', 'e', 'm', 'b', 'e', 'd', 'd', 'e', 'd', '/', 'C', 'h', 'e', 'r', 'r', 'y', 'U', 'S', 'B',
@@ -62,7 +70,7 @@ struct usb_bos_descriptor bos_desc = {
 #define HID_INT_EP_SIZE     8
 #define HID_INT_EP_INTERVAL 10
 
-#define USB_CONFIG_SIZE       (34 + 9)
+#define USB_CONFIG_SIZE       (48 + 9)
 #define HID_KEYBOARD_REPORT_DESC_SIZE 63
 
 static const uint8_t device_descriptor[] = {
@@ -72,7 +80,9 @@ static const uint8_t device_descriptor[] = {
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     HID_KEYBOARD_DESCRIPTOR_INIT(0x00, 0x01, HID_KEYBOARD_REPORT_DESC_SIZE, HID_INT_EP, HID_INT_EP_SIZE, HID_INT_EP_INTERVAL),
-    USB_INTERFACE_DESCRIPTOR_INIT(WEBUSB_INTF_NUM, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00)
+    USB_INTERFACE_DESCRIPTOR_INIT(WEBUSB_INTF_NUM, 0x00, 0x02, 0xff, 0x00, 0x00, 0x00),
+    USB_ENDPOINT_DESCRIPTOR_INIT(WEBUSB_IN_EP, 0x02, WEBUSB_EP_MPS, 0x00),
+    USB_ENDPOINT_DESCRIPTOR_INIT(WEBUSB_OUT_EP, 0x02, WEBUSB_EP_MPS, 0x00)
 };
 
 static const uint8_t device_quality_descriptor[] = {
@@ -186,6 +196,12 @@ static const uint8_t hid_keyboard_report_desc[HID_KEYBOARD_REPORT_DESC_SIZE] = {
 /*!< hid state ! Data can be sent only when state is idle  */
 static volatile uint8_t hid_state = HID_STATE_IDLE;
 
+/* WebUSB vendor interface data buffers and transmit state */
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t webusb_tx_buffer[64];
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t webusb_rx_buffer[64];
+
+volatile bool webusb_tx_busy = false;
+
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -201,6 +217,9 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
             break;
         case USBD_EVENT_CONFIGURED:
             hid_state = HID_STATE_IDLE;
+            webusb_tx_busy = false;
+            /* Arm the first OUT transfer so the browser can send data in */
+            usbd_ep_start_read(busid, WEBUSB_OUT_EP, webusb_rx_buffer, WEBUSB_EP_MPS);
             break;
         case USBD_EVENT_SET_REMOTE_WAKEUP:
             break;
@@ -224,12 +243,65 @@ static struct usbd_endpoint hid_in_ep = {
 
 static struct usbd_interface intf0;
 
+/* WebUSB vendor interface data channel (bulk IN / OUT) */
+static void webusb_in_ep_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    if ((nbytes % WEBUSB_EP_MPS) == 0 && nbytes) {
+        /* Send zero-length packet to terminate a transfer whose length is a multiple of MPS */
+        usbd_ep_start_write(busid, WEBUSB_IN_EP, NULL, 0);
+    } else {
+        webusb_tx_busy = false;
+    }
+}
+
+static void webusb_out_ep_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    /* Data from the browser is in webusb_rx_buffer; echo it back for demo */
+    if (nbytes > 0) {
+        usbd_ep_start_write(busid, WEBUSB_IN_EP, webusb_rx_buffer, nbytes);
+    }
+    /* Re-arm the OUT transfer to receive the next packet */
+    usbd_ep_start_read(busid, WEBUSB_OUT_EP, webusb_rx_buffer, WEBUSB_EP_MPS);
+}
+
+/*
+ * Send arbitrary data to the browser through the WebUSB bulk IN endpoint.
+ * Returns 0 on success, -1 if the device is not configured yet.
+ * The transfer is asynchronous; webusb_tx_busy is cleared when it completes.
+ */
+int webusb_send_data(uint8_t busid, const uint8_t *data, uint32_t len)
+{
+    if (usb_device_is_configured(busid) == false) {
+        return -1;
+    }
+    if (len > sizeof(webusb_tx_buffer)) {
+        len = sizeof(webusb_tx_buffer);
+    }
+    memcpy(webusb_tx_buffer, data, len);
+    webusb_tx_busy = true;
+    usbd_ep_start_write(busid, WEBUSB_IN_EP, webusb_tx_buffer, len);
+    return 0;
+}
+
+static struct usbd_endpoint webusb_in_ep = {
+    .ep_addr = WEBUSB_IN_EP,
+    .ep_cb = webusb_in_ep_callback,
+};
+
+static struct usbd_endpoint webusb_out_ep = {
+    .ep_addr = WEBUSB_OUT_EP,
+    .ep_cb = webusb_out_ep_callback,
+};
+
 void webusb_hid_keyboard_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &webusb_hid_descriptor);
 
     usbd_add_interface(busid, usbd_hid_init_intf(busid, &intf0, hid_keyboard_report_desc, HID_KEYBOARD_REPORT_DESC_SIZE));
     usbd_add_endpoint(busid, &hid_in_ep);
+
+    usbd_add_endpoint(busid, &webusb_in_ep);
+    usbd_add_endpoint(busid, &webusb_out_ep);
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
 }
