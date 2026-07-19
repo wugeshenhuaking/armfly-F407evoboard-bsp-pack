@@ -1,33 +1,74 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <title>CherryUSB WebUSB 数据接收</title>
+    <style>
+        #log {
+            height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            font-size: 16px;
+            background: #f7f7f7;
+            padding: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+            font-family: Consolas, monospace;
+        }
+        button {
+            margin: 4px;
+            padding: 4px 10px;
+        }
+    </style>
 </head>
 <body>
     <h1>CherryUSB WebUSB 数据接收</h1>
     <p>注意：WebUSB 需要在安全上下文（https 或 http://localhost）下运行。
        请用 <code>python -m http.server</code> 在本目录起一个本地服务，再用 Chrome/Edge 打开。</p>
+
     <button id="connect">连接 USB 设备</button>
     <button id="read" disabled>开始接收</button>
     <button id="send">发送测试(0x00~0x0F)</button>
+    <button id="clear">清空日志</button>
+
     <pre id="log"></pre>
 
     <script>
-        // 需与固件中的 VID/PID 保持一致（task_usb.c: USBD_VID / USBD_PID）
+        // USB 参数配置
         const VID = 0xffff;
         const PID = 0xffff;
-        const WEBUSB_INTERFACE = 1;   // WebUSB 厂商接口号
-        const IN_EP  = 2;             // 0x82 -> 端点号 2, IN
-        const OUT_EP = 2;             // 0x02 -> 端点号 2, OUT
+        const WEBUSB_INTERFACE = 1;
+        const IN_EP  = 2;
+        const OUT_EP = 2;
+        const MAX_LOG_LINE = 300;
 
         let device = null;
         const log = document.getElementById('log');
+
+        // 获取当前时间戳 格式：HH:mm:ss.fff
+        function getTimeStamp() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            const ms = String(now.getMilliseconds()).padStart(3, '0');
+            return `[${h}:${m}:${s}.${ms}]`;
+        }
+
+        // 打印日志函数，自动拼接时间戳 + 行数限制
         function println(s) {
-            log.textContent += s + '\n';
+            const time = getTimeStamp();
+            log.textContent += `${time} ${s}\n`;
+            // 超行数裁剪旧日志
+            const lineArr = log.textContent.split('\n');
+            if (lineArr.length > MAX_LOG_LINE) {
+                log.textContent = lineArr.slice(-MAX_LOG_LINE).join('\n');
+            }
+            // 自动滚动到底部
             log.scrollTop = log.scrollHeight;
         }
 
+        // 连接设备
         document.getElementById('connect').onclick = async () => {
             try {
                 device = await navigator.usb.requestDevice({
@@ -46,7 +87,7 @@
             }
         };
 
-        // 持续从 WebUSB 批量 IN 端点读取设备发来的数据
+        // 持续接收数据
         document.getElementById('read').onclick = async () => {
             try {
                 while (true) {
@@ -60,7 +101,7 @@
             }
         };
 
-        // 向设备发送一帧测试数据（经 WebUSB 批量 OUT 端点）
+        // 发送测试数据包
         document.getElementById('send').onclick = async () => {
             try {
                 const tx = new Uint8Array(16);
@@ -70,6 +111,11 @@
             } catch (e) {
                 println('发送失败: ' + e);
             }
+        };
+
+        // 清空日志按钮
+        document.getElementById('clear').onclick = () => {
+            log.textContent = '';
         };
     </script>
 </body>

@@ -15,8 +15,9 @@
 *********************************************************************************************************
 */
 #include "bsp.h"
-
-
+#include "utility.h"
+#include "./LCD/lcd.h"
+#include "./SRAM/sram.h"
 
 /*
 *********************************************************************************************************
@@ -58,11 +59,22 @@ void bsp_Init(void)
     EventRecorderInitialize(EventRecordAll, 1U);
     EventRecorderStart();
 #endif
+    delay_us_init(SystemCoreClock); /* 初始化延迟函数 */
     // bsp_InitKey();      /* 按键初始化，要放在滴答定时器之前，因为按钮检测是通过滴答定时器扫描 */
     // bsp_InitTimer();    /* 初始化滴答定时器 */
     bsp_InitUart();     /* 初始化串口 */
     bsp_InitLed();      /* 初始化LED */
+    sram_init();        /* 初始化外部SRAM（必须先于LCD，使显存镜像可用） */
+    lcd_init();         /* 初始化LCD */
+
+    lcd_show_string(30, 50, 200, 16, 16, "STM32", RED);
+    lcd_show_string(30, 70, 200, 16, 16, "USB WebUSB TEST", RED);
+    lcd_show_string(30, 90, 200, 16, 16, "wyw@wyw", RED);
+    lcd_show_string(30, 110, 200, 16, 16, "USB Connecting...", RED); /* 提示USB开始连接 */
+    lcd_show_string(30, 135, 200, 16, 16, "CNT:", RED); /* 自增计数器前缀（数字由 main.c 每秒更新） */
+
     bsp_InitUsb();      /* 初始化USB */
+
 }
 
 /*

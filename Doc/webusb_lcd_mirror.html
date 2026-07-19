@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>CherryUSB LCD 镜像接收</title>
+    <style>
+        body { font-family: sans-serif; margin: 16px; }
+        #wrap { display: flex; gap: 16px; align-items: flex-start; }
+        canvas { border: 1px solid #888; background: #000; image-rendering: pixelated; }
+        pre { flex: 1; background: #f4f4f4; padding: 8px; height: 480px; overflow: auto; }
+        button { padding: 6px 12px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <h1>CherryUSB LCD 镜像接收</h1>
+    <p>
+        注意：WebUSB 需安全上下文。请用 <code>python -m http.server</code> 在本目录起本地服务，
+        用 Chrome/Edge 打开 <code>http://localhost:8000/webusb_lcd_mirror.html</code>。
+        不要用 <code>file://</code> 直接双击打开。
+    </p>
+    <div>
+        <button id="connect">连接 USB 设备</button>
+        <span id="stat">未连接</span>
+    </div>
+    <div style="margin-top: 8px;">
+        <button id="scale-fit">适配窗口</button>
+        <button id="scale-half">0.5x</button>
+        <button id="scale-one">1:1</button>
+        <span style="color: #666; font-size: 12px;">（1:1 可避免浏览器缩放导致「像素列」丢失）</span>
+    </div>
+    <div id="wrap">
+        <canvas id="screen" width="200" height="120"></canvas>
+        <pre id="log"></pre>
+    </div>
+
+    <script>
+        // 需与固件中的 VID/PID 保持一致（task_usb.c: USBD_VID / USBD_PID）
+        const VID = 0xffff;
+        const PID = 0xffff;
+        const WEBUSB_INTERFACE = 1;   // WebUSB 厂商接口号
+        const IN_EP  = 2;             // 0x82 -> 端点号 2, IN
+        const OUT_EP = 2;             // 0x02 -> 端点号 2, OUT（命令下发用）
+
+        const canvas = document.getElementById('screen');
+        const ctx = canvas.getContext('2d');
+        const log = document.getElementById('log');
+        const stat = document.getElementById('stat');
+        function println(s) {
+            log.textContent += s + '\n';
+            log.scrollTop = log.scrollHeight;
+        }
+
+        let device = null;
+        // 当前帧重组状态
+        let frameW = 0, frameH = 0, frameBytes = 0, frameBuf = null, frameGot = 0;
+        let fpsCount = 0, fpsLast = performance.now();
+        let gotHeader = false;      // 是否已收到整帧头（未收到前忽略脏 tile，避免刷新重连后异常）
+        let recvTotal = 0;          // 累计接收字节数（用于状态栏显示）
+
+        let currentScale = 1.0;   // 默认 1:1，避免浏览器缩放导致部分像素列被合并/丢弃
+        function applyScale() {
+            if (currentScale === 'fit') {
+                canvas.style.width = '';
+                canvas.style.height = '';
+                canvas.style.maxWidth = '100%';
+                canvas.style.maxHeight = '85vh';
+            } else {
+                if (!frameW || !frameH) return;
+                canvas.style.maxWidth = 'none';
+                canvas.style.maxHeight = 'none';
+                canvas.style.width = (frameW * currentScale) + 'px';
+                canvas.style.height = (frameH * currentScale) + 'px';
+            }
+        }
+
+        // 协议：每个 USB 包(<=64字节) = 魔数(2) + type(1) + offset(4, LE) + payload
+        //   type=1 FRAME_HEADER: payload = fmt(1=RGB565) + w(2 LE) + h(2 LE)
+        //   type=2 FRAME_DATA:   payload = 从 offset 开始的 RGB565 像素字节
+        const MAGIC0 = 0xAA, MAGIC1 = 0x55;
+
+        document.getElementById('connect').onclick = async () => {
+            try {
+                device = await navigator.usb.requestDevice({
+                    filters: [{ vendorId: VID, productId: PID }]
+                });
+                await device.open();
+                if (device.configuration === null) {
+                    await device.selectConfiguration(1);
+                }
+                await device.claimInterface(WEBUSB_INTERFACE);
+
+                // 重置接收状态（刷新重连后保险；JS 上下文虽已重建也再清一次）
+                frameBuf = null; curFrame = null; curTile = null;
+                backCanvas = null; backCtx = null; gotHeader = false; recvTotal = 0;
+
+                stat.textContent = '已连接: ' + (device.productName || 'unknown');
+                println('已连接设备，正在请求 MCU 发送整帧底图...');
+
+                // 主动请求 MCU 发送一整帧显存（0x01 = CMD_REQ_FULL_FRAME），
+                // 这样刷新重连后也能立即获得完整画面，而不是只收脏 tile。
+                try {
+                    await device.transferOut(OUT_EP, new Uint8Array([0x01]));
+                    println('已发送「请求整帧」命令');
+                } catch (e) {
+                    println('请求整帧失败(可忽略): ' + e);
+                }
+
+                readLoop(device);
+            } catch (e) {
+                println('连接失败: ' + e);
+            }
+        };
+
+        document.getElementById('scale-fit').onclick = () => { currentScale = 'fit'; applyScale(); };
+        document.getElementById('scale-half').onclick = () => { currentScale = 0.5; applyScale(); };
+        document.getElementById('scale-one').onclick = () => { currentScale = 1.0; applyScale(); };
+
+        let curFrame = null;   // 整帧同步续接：{buf, got, total}
+        let curTile  = null;   // 脏区域 tile 续接：{x,y,w,h,buf,got}
+
+        /* 双缓冲：tile / 整帧先画到离屏 back buffer，rAF 每帧整体 blit 到可见 canvas，
+         * 避免「逐 tile 到达、逐 tile 绘制」之间浏览器重绘造成的横向撕裂。 */
+        let backCanvas = null, backCtx = null, needBlit = false;
+        function blitLoop() {
+            if (needBlit && backCtx) {
+                ctx.drawImage(backCanvas, 0, 0);
+                needBlit = false;
+            }
+            requestAnimationFrame(blitLoop);
+        }
+        requestAnimationFrame(blitLoop);
+
+        async function readLoop(dev) {
+            try {
+                while (true) {
+                    const res = await dev.transferIn(IN_EP, 64);
+                    if (!res.data) continue;
+                    const pkt = new Uint8Array(res.data.buffer);
+                    if (pkt.length < 7) continue;
+                    recvTotal += pkt.length;   // 累计接收字节（状态栏展示用）
+
+                    // 一次 usbd_ep_start_write 提交会被驱动自动拆成多个 64 字节包，
+                    // 只有「第一个包」带 7/15 字节协议头，后续包是纯裸像素数据（无魔数）。
+                    // 因此用「是否带魔数」来区分：
+                    //   - 带魔数  -> 新协议包（新 chunk / 新 tile / 整帧头）
+                    //   - 不带    -> 上一段提交内的裸数据，按当前状态续接
+                    const isProto = (pkt[0] === MAGIC0 && pkt[1] === MAGIC1);
+
+                    if (!isProto) {
+                        if (curTile && curTile.got < curTile.buf.length) {
+                            const n = Math.min(pkt.length, curTile.buf.length - curTile.got);
+                            curTile.buf.set(pkt.subarray(0, n), curTile.got);
+                            curTile.got += n;
+                            if (curTile.got >= curTile.buf.length) {
+                                drawTile(curTile);
+                                curTile = null;
+                            }
+                            continue;
+                        }
+                        if (curFrame && curFrame.got < curFrame.total) {
+                            const n = Math.min(pkt.length, curFrame.total - curFrame.got);
+                            curFrame.buf.set(pkt.subarray(0, n), curFrame.got);
+                            curFrame.got += n;
+                            if (curFrame.got >= curFrame.total) {
+                                renderFrame(curFrame.buf, frameW, frameH);
+                                curFrame = null;   // 整帧完成，准备接收下一帧
+                            }
+                            continue;
+                        }
+                        continue;   // 非协议包且无可续接状态，丢弃
+                    }
+
+                    // ---- 以下为协议包解析 ----
+                    const type = pkt[2];
+
+                    if (type === 1) {            // FRAME_HEADER（整帧同步，仅连接时）
+                        const fmt = pkt[7];
+                        frameW = pkt[8] | (pkt[9] << 8);
+                        frameH = pkt[10] | (pkt[11] << 8);
+                        frameBytes = frameW * frameH * 2;
+                        frameBuf = new Uint8Array(frameBytes);
+                        curFrame = { buf: frameBuf, got: 0, total: frameBytes };
+                        canvas.width = frameW;
+                        canvas.height = frameH;
+                        if (!backCanvas) { backCanvas = document.createElement('canvas'); backCtx = backCanvas.getContext('2d'); }
+                        backCanvas.width = frameW;
+                        backCanvas.height = frameH;
+                        gotHeader = true;   // 此后才接受脏 tile 增量更新
+                        applyScale();
+                        println(`帧头: ${frameW}x${frameH} fmt=${fmt} (${frameBytes} 字节)`);
+                    } else if (type === 2) {     // FRAME_DATA（整帧同步数据，首包带 header）
+                        const offset = (pkt[3] | (pkt[4] << 8) | (pkt[5] << 16) | (pkt[6] << 24)) >>> 0;
+                        const payload = pkt.subarray(7);
+                        if (!frameBuf) continue;
+                        const n = Math.min(payload.length, frameBytes - offset);
+                        if (n > 0) {
+                            frameBuf.set(payload.subarray(0, n), offset);
+                            curFrame = { buf: frameBuf, got: offset + n, total: frameBytes };
+                        }
+                        if (curFrame.got >= curFrame.total) {
+                            renderFrame(frameBuf, frameW, frameH);
+                            curFrame = null;
+                        }
+                    } else if (type === 3) {     // TILE（脏区域增量更新，不清屏）
+                        if (!gotHeader) continue;  // 未收到整帧头前忽略，避免刷新重连后异常
+                        const tx = pkt[3] | (pkt[4] << 8);
+                        const ty = pkt[5] | (pkt[6] << 8);
+                        const tw = pkt[7] | (pkt[8] << 8);
+                        const th = pkt[9] | (pkt[10] << 8);
+                        // pkt[11..14] = tile_off（本实现恒为0，整 tile 一次发完）
+                        const pix = pkt.subarray(15);
+                        curTile = { x: tx, y: ty, w: tw, h: th, buf: new Uint8Array(tw * th * 2), got: 0 };
+                        const n = Math.min(pix.length, curTile.buf.length);
+                        curTile.buf.set(pix, 0);
+                        curTile.got = n;
+                        if (curTile.got >= curTile.buf.length) {
+                            drawTile(curTile);
+                            curTile = null;
+                        }
+                    }
+                }
+            } catch (e) {
+                println('接收错误: ' + e);
+                stat.textContent = '已断开';
+            }
+        }
+
+        // 把一个 tile 的 RGB565 像素贴到离屏 back buffer 的 (x,y) 区域（增量更新，不清屏）
+        function drawTile(t) {
+            if (!backCtx) return;   // 防御：backCanvas 未建立时不绘制
+            const w = Math.min(t.w, canvas.width  - t.x);
+            const h = Math.min(t.h, canvas.height - t.y);
+            if (w <= 0 || h <= 0) return;
+            const img = backCtx.createImageData(w, h);
+            const out = img.data;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const srcIdx = (y * t.w + x) * 2;
+                    const p = t.buf[srcIdx] | (t.buf[srcIdx + 1] << 8);
+                    const dstIdx = (y * w + x) * 4;
+                    const r5 = (p >> 11) & 0x1F;
+                    const g6 = (p >> 5) & 0x3F;
+                    const b5 = p & 0x1F;
+                    out[dstIdx]     = (r5 << 3) | (r5 >> 2);
+                    out[dstIdx + 1] = (g6 << 2) | (g6 >> 4);
+                    out[dstIdx + 2] = (b5 << 3) | (b5 >> 2);
+                    out[dstIdx + 3] = 255;
+                }
+            }
+            backCtx.putImageData(img, t.x, t.y);
+            needBlit = true;   // 标记本帧有更新，等待 rAF 一次性提交
+        }
+
+        // RGB565 (little-endian bytes) -> RGBA, 画到离屏 back buffer
+        function renderFrame(bytes, w, h) {
+            const img = backCtx.createImageData(w, h);
+            const out = img.data;
+            for (let i = 0; i < w * h; i++) {
+                const p = bytes[i * 2] | (bytes[i * 2 + 1] << 8);
+                const r5 = (p >> 11) & 0x1F;
+                const g6 = (p >> 5) & 0x3F;
+                const b5 = p & 0x1F;
+                out[i * 4]     = (r5 << 3) | (r5 >> 2);
+                out[i * 4 + 1] = (g6 << 2) | (g6 >> 4);
+                out[i * 4 + 2] = (b5 << 3) | (b5 >> 2);
+                out[i * 4 + 3] = 255;
+            }
+            backCtx.putImageData(img, 0, 0);
+            needBlit = true;
+
+            println(`整帧渲染完成 (${w * h * 2} 字节)`);
+
+            fpsCount++;
+            const now = performance.now();
+            if (now - fpsLast >= 1000) {
+                stat.textContent = `已连接 | ${w}x${h} | ${fpsCount} fps | 收到 ${(recvTotal / 1024).toFixed(1)} KB`;
+                fpsCount = 0;
+                fpsLast = now;
+            }
+        }
+    </script>
+</body>
+</html>

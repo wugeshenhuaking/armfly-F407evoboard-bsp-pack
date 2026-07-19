@@ -27,6 +27,7 @@
 #include "bsp.h"     /* Hardware abstraction layer */
 #include "utility.h" /* General utility functions */
 #include "task_usb.h"
+#include "LCD/framebuffer.h"   /* 软件显存（外部SRAM镜像），提供 LCD_FRAMEBUFFER 等 */
 /* Define example name and release date */
 #define EXAMPLE_NAME "V5-Running LED"
 #define EXAMPLE_DATE "2019-04-23"
@@ -56,18 +57,60 @@ void app_task_led_init(task_led_t *task)
     left_ms_set(&task->timer, 500);
 }
 
+typedef struct
+{
+    time_ms_t timer;
+} task_fb_t;
+
+task_fb_t fb_task = {0};
+
+void app_task_fb_init(task_fb_t *task)
+{
+    left_ms_set(&task->timer, 100);
+}
+
+void app_task_fb(task_fb_t *task)
+{
+    if (left_ms(&task->timer))
+    {
+        return;
+    }
+
+    /* ---- 动态演示1：LCD 底部移动一个红色方块，用于直观验证脏区域(tile)机制 ----
+     * lcd_fill 会标记受影响的 tile 为脏，webusb_fb_poll 只发送这些变化的 tile，
+     * 上方红字等静止区域完全不占 USB 带宽。不需要此演示时可整段删除。 */
+    static uint16_t box_x = 0;
+    lcd_fill(box_x, 750, box_x + 30, 780, WHITE);   /* 擦除上一帧方块（首帧擦白底，无副作用） */
+    box_x += 6;
+    if (box_x > FB_WIDTH - 40) {
+        box_x = 0;
+    }
+    lcd_fill(box_x, 750, box_x + 30, 780, RED);     /* 画新方块（标记脏 tile） */
+
+    /* ---- 动态演示2：自增计数器（每秒 +1），演示数字显示 + 脏区域 ----
+     * 前缀 "CNT:" 在 bsp_Init 中画好；这里每秒清除数字区并重绘自增数字。 */
+    static uint32_t cnt = 0;
+    static uint8_t  cnt_tick = 0;
+    if (++cnt_tick >= 10) {                          /* 100ms * 10 = 1s */
+        cnt_tick = 0;
+        lcd_fill(70, 135, 200, 151, WHITE);         /* 清除数字区（保留 "CNT:" 前缀） */
+        lcd_show_num(70, 135, cnt, 5, 16, RED);     /* 显示 5 位自增数字 */
+        cnt++;
+    }
+
+    /* 脏区域分块发送：连接后先整帧同步，之后只发变化的 tile，未变区域不占带宽 */
+    webusb_fb_poll(0);
+    left_ms_set(&task->timer, 100);
+}
+
 void app_task_led(task_led_t *task)
 {
-    uint8_t buf[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-
     if (left_ms(&task->timer))
     {
         return;
     }
     // LED task logic here
     bsp_LedToggle(1);
-    // hid_keyboard_test(0);
-    webusb_send_data(0, buf, 8);   /* busid = 0 */
     printf("LED1 toggled\r\n");
     left_ms_set(&task->timer, 500);
 }
@@ -80,6 +123,7 @@ int main(void)
     PrintfLogo(); /* Print example name and version info */
     PrintfHelp(); /* Print operation tips */
     app_task_led_init(&led_task);
+    app_task_fb_init(&fb_task);
     static volatile uint8_t jump_flag = 0;
 
     webusb_hid_keyboard_init(0, USB_OTG_FS_PERIPH_BASE);
@@ -89,10 +133,7 @@ int main(void)
     {
         bsp_Idle(); /* This function is in bsp.c. Users can modify it for CPU sleep and watchdog feeding */
         app_task_led(&led_task); 
-    //    if (jump_flag)
-    //    {
-    //        JumpToBootloader();
-    //    }
+        app_task_fb(&fb_task);
     }
 }
 
