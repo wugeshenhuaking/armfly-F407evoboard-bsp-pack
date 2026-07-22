@@ -21,8 +21,8 @@
 #define LCD_FB_ADDR   0x68000000UL
 
 /* 显存分辨率（与LCD实际分辨率保持一致，竖屏：宽480 高800） */
-#define FB_WIDTH      480
-#define FB_HEIGHT     800
+#define FB_WIDTH      800
+#define FB_HEIGHT     480
 
 /* 直接把外部SRAM当 uint16_t 显存数组用（RGB565，16bit/像素） */
 #define LCD_FRAMEBUFFER   ((volatile uint16_t *)LCD_FB_ADDR)

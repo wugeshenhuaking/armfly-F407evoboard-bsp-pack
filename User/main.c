@@ -76,9 +76,13 @@ void app_task_fb(task_fb_t *task)
         return;
     }
 
-    /* ---- 动态演示1：LCD 底部移动一个红色方块，用于直观验证脏区域(tile)机制 ----
-     * lcd_fill 会标记受影响的 tile 为脏，webusb_fb_poll 只发送这些变化的 tile，
-     * 上方红字等静止区域完全不占 USB 带宽。不需要此演示时可整段删除。 */
+    /* CDC 接收 PC 屏数据并绘制到 MCU 屏（当前主用功能）。
+       收到完整一帧后在 cdc_fb_service 内整屏刷到 LCD GRAM。 */
+    cdc_fb_service();
+
+    /* 原 LCD 动态演示（移动红方块 / 计数器）会持续改写显存，与 CDC 整屏
+       覆盖互相干扰，故默认关闭；如需验证 WebUSB 脏区域镜像可重新启用。 */
+#if 0
     static uint16_t box_x = 0;
     lcd_fill(box_x, 750, box_x + 30, 780, WHITE);   /* 擦除上一帧方块（首帧擦白底，无副作用） */
     box_x += 6;
@@ -87,8 +91,6 @@ void app_task_fb(task_fb_t *task)
     }
     lcd_fill(box_x, 750, box_x + 30, 780, RED);     /* 画新方块（标记脏 tile） */
 
-    /* ---- 动态演示2：自增计数器（每秒 +1），演示数字显示 + 脏区域 ----
-     * 前缀 "CNT:" 在 bsp_Init 中画好；这里每秒清除数字区并重绘自增数字。 */
     static uint32_t cnt = 0;
     static uint8_t  cnt_tick = 0;
     if (++cnt_tick >= 10) {                          /* 100ms * 10 = 1s */
@@ -97,10 +99,13 @@ void app_task_fb(task_fb_t *task)
         lcd_show_num(70, 135, cnt, 5, 16, RED);     /* 显示 5 位自增数字 */
         cnt++;
     }
+#endif
 
-    /* 脏区域分块发送：连接后先整帧同步，之后只发变化的 tile，未变区域不占带宽 */
+    /* WebUSB 镜像轮询（当前已在 task_usb.c 中通过 WEBUSB_TX_ENABLED 关闭发送，
+       保留调用不影响；如需恢复镜像发送，把该宏置 1 重编译即可）。 */
     webusb_fb_poll(0);
-    left_ms_set(&task->timer, 100);
+
+    left_ms_set(&task->timer, 20);   /* CDC 全量约 1fps，20ms 轮询足够且省 CPU */
 }
 
 void app_task_led(task_led_t *task)

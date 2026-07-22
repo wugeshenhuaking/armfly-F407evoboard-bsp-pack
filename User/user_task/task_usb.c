@@ -6,6 +6,7 @@
 #include "task_usb.h"
 #include "usbd_core.h"
 #include "usbd_hid.h"
+#include "usbd_cdc_acm.h"      /* CherryUSB CDC ACM 类（PC屏->MCU屏 虚拟串口） */
 #include "LCD/framebuffer.h"   /* 软件显存 + 脏区域tile定义 */
 
 #define WEBUSB_VENDOR_CODE (0x22)
@@ -21,6 +22,24 @@
 #define WEBUSB_EP_MPS   512
 #else
 #define WEBUSB_EP_MPS   64
+#endif
+
+/* WebUSB 镜像发送开关：置 1 重编译可恢复"MCU屏->浏览器"镜像；
+   当前为 0，禁用 WebUSB 帧发送，把 USB 带宽全部留给 CDC（PC屏->MCU屏）。 */
+#define WEBUSB_TX_ENABLED  0
+
+/* CDC ACM 接口（接收 PC 屏数据并绘制到 MCU 屏）。
+   F407 USB FS 只有 4 个端点(编号 0~3)，端点分配必须全部落在 0~3 内：
+     HID INT IN=0x81(EP1),
+     CDC INT(notify) IN=0x82(EP2),
+     CDC BULK IN=0x83 / OUT=0x03（BULK 双向共用 EP3，符合 USB CDC 规范） */
+#define CDC_INT_EP   0x82
+#define CDC_OUT_EP   0x03
+#define CDC_IN_EP    0x83
+#ifdef CONFIG_USB_HS
+#define CDC_EP_MPS   512
+#else
+#define CDC_EP_MPS   64
 #endif
 
 /* 插上 USB 后浏览器弹出的"前往"链接：指向本地 WebUSB 镜像页面。
@@ -77,19 +96,45 @@ struct usb_bos_descriptor bos_desc = {
 #define HID_INT_EP_SIZE     8
 #define HID_INT_EP_INTERVAL 10
 
-#define USB_CONFIG_SIZE       (48 + 9)
+/* 配置描述符总长（含 CDC ACM 66 字节）。
+   WEBUSB_TX_ENABLED=1: HID(25)+WebUSB(23)+config(9)+CDC(66)
+   WEBUSB_TX_ENABLED=0: HID(25)+config(9)+CDC(66)  （WebUSB 接口整体移除，省端点/带宽） */
+#if WEBUSB_TX_ENABLED
+#define USB_CONFIG_SIZE       (57 + CDC_ACM_DESCRIPTOR_LEN)
+#else
+#define USB_CONFIG_SIZE       (9 + 25 + CDC_ACM_DESCRIPTOR_LEN)
+#endif
 #define HID_KEYBOARD_REPORT_DESC_SIZE 63
 
 static const uint8_t device_descriptor[] = {
-    USB_DEVICE_DESCRIPTOR_INIT(USB_2_1, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0002, 0x01)
+    /* CDC 复合需要 IAD，bDeviceClass 必须为 0xEF/0x02/0x01（Miscellaneous/IAD） */
+#if WEBUSB_TX_ENABLED
+    /* WebUSB 开启时走 USB2.1 + BOS（含 WebUSB/WinUSB 平台能力） */
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_1, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0002, 0x01)
+#else
+    /* WebUSB 关闭时不注册 BOS，用 USB2.0 更稳妥，CDC 由系统 usbser 驱动识别 */
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0002, 0x01)
+#endif
 };
 
+#if WEBUSB_TX_ENABLED
+#define CDC_FIRST_INTF   0x02   /* WebUSB 占接口1，CDC 从接口2开始 */
+#define FB_NUM_INTF      0x04   /* HID(1) + WebUSB(1) + CDC(2) = 4 */
+#else
+#define CDC_FIRST_INTF   0x01   /* WebUSB 接口整体移除，CDC 紧接 HID(0) 从接口1开始 */
+#define FB_NUM_INTF      0x03   /* HID(1) + CDC(2, IAD含通信+数据接口) = 3 */
+#endif
+
 static const uint8_t config_descriptor[] = {
-    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, FB_NUM_INTF, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     HID_KEYBOARD_DESCRIPTOR_INIT(0x00, 0x01, HID_KEYBOARD_REPORT_DESC_SIZE, HID_INT_EP, HID_INT_EP_SIZE, HID_INT_EP_INTERVAL),
+#if WEBUSB_TX_ENABLED
     USB_INTERFACE_DESCRIPTOR_INIT(WEBUSB_INTF_NUM, 0x00, 0x02, 0xff, 0x00, 0x00, 0x00),
     USB_ENDPOINT_DESCRIPTOR_INIT(WEBUSB_IN_EP, 0x02, WEBUSB_EP_MPS, 0x00),
-    USB_ENDPOINT_DESCRIPTOR_INIT(WEBUSB_OUT_EP, 0x02, WEBUSB_EP_MPS, 0x00)
+    USB_ENDPOINT_DESCRIPTOR_INIT(WEBUSB_OUT_EP, 0x02, WEBUSB_EP_MPS, 0x00),
+#endif
+    /* CDC ACM：起始接口 CDC_FIRST_INTF，含 IAD + Communication + Data 两个接口 */
+    CDC_ACM_DESCRIPTOR_INIT(CDC_FIRST_INTF, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, CDC_EP_MPS, 0x00)
 };
 
 static const uint8_t device_quality_descriptor[] = {
@@ -143,9 +188,12 @@ const struct usb_descriptor webusb_hid_descriptor = {
     .config_descriptor_callback = config_descriptor_callback,
     .device_quality_descriptor_callback = device_quality_descriptor_callback,
     .string_descriptor_callback = string_descriptor_callback,
+#if WEBUSB_TX_ENABLED
+    /* 仅当 WebUSB 镜像开启时注册 BOS/WinUSB/MSOSv2，避免 WinUSB 误绑到 CDC 接口 */
     .msosv2_descriptor = &msosv2_desc,
     .webusb_url_descriptor = &webusb_url_desc,
     .bos_descriptor = &bos_desc
+#endif
 };
 
 /* USB HID device Configuration Descriptor */
@@ -227,6 +275,11 @@ static uint8_t           fb_force_full = 0;   /* 连接后强制先发整帧 */
 #define FB_CHUNK        2048u
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX static uint8_t webusb_fb_buf[FB_CHUNK + 16];
 
+/* CDC 接收缓冲（USB 中断回调中写入，用于接收 PC 屏 RGB565 数据）。
+   定义在文件靠前位置，先于 usbd_event_handler() 使用（CONNECTED 时挂载 OUT 读）。 */
+#define CDC_RX_BUF_SIZE   2048u
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX static uint8_t cdc_rx_buf[CDC_RX_BUF_SIZE];
+
 /* 脏区域位图（实体在此，framebuffer.h 仅 extern 声明） */
 uint8_t fb_dirty[FB_DIRTY_BYTES];
 uint8_t fb_dirty_all = 0;
@@ -286,9 +339,12 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
         case USBD_EVENT_CONFIGURED:
             hid_state = HID_STATE_IDLE;
             webusb_tx_busy = false;
+#if WEBUSB_TX_ENABLED
             fb_force_full = 1;   /* 连接后先发整帧，让浏览器获得完整画面 */
-            /* Arm the first OUT transfer so the browser can send data in */
             usbd_ep_start_read(busid, WEBUSB_OUT_EP, webusb_rx_buffer, WEBUSB_EP_MPS);
+#endif
+            /* 挂载 CDC OUT 读，开始接收 PC 屏数据 */
+            usbd_ep_start_read(busid, CDC_OUT_EP, cdc_rx_buf, CDC_RX_BUF_SIZE);
             break;
         case USBD_EVENT_SET_REMOTE_WAKEUP:
             break;
@@ -399,6 +455,10 @@ static inline void fb_set_fhdr(uint8_t *p, uint8_t type, uint32_t offset)
  * 非阻塞：一次只提交一个 tile / 一个数据块，由 IN 端点回调驱动后续。 */
 void webusb_fb_poll(uint8_t busid)
 {
+#if WEBUSB_TX_ENABLED == 0
+    (void)busid;
+    return;   /* WebUSB 镜像发送已禁用，USB 带宽全留给 CDC；置 WEBUSB_TX_ENABLED=1 重编译可恢复 */
+#endif
     if (usb_device_is_configured(busid) == false) {
         return;
     }
@@ -448,8 +508,9 @@ static void webusb_fb_send_tile(uint8_t busid, uint16_t idx)
     p[9] = (uint8_t)(th & 0xFF); p[10] = (uint8_t)(th >> 8);
     p[11] = 0; p[12] = 0; p[13] = 0; p[14] = 0;  /* tile_off = 0（一个tile一次发完） */
 
-    /* 逐行拷贝 tile 像素（行之间在显存中不连续） */
-    const uint16_t *src = LCD_FRAMEBUFFER + (uint32_t)ty * FB_WIDTH + tx;
+    /* 逐行拷贝 tile 像素（行之间在显存中不连续）。
+       LCD_FRAMEBUFFER 为 volatile uint16_t*，读显存用 const 转换避免限定符告警 */
+    const uint16_t *src = (const uint16_t *)LCD_FRAMEBUFFER + (uint32_t)ty * FB_WIDTH + tx;
     uint8_t *dst = p + 15;
     for (uint16_t r = 0; r < th; r++) {
         memcpy(dst + (uint32_t)r * tw * 2, src + (uint32_t)r * FB_WIDTH, (uint32_t)tw * 2);
@@ -516,6 +577,22 @@ static struct usbd_endpoint webusb_out_ep = {
     .ep_cb = webusb_out_ep_callback,
 };
 
+/* CDC ACM 接口与端点（接收 PC 屏数据绘制到 MCU 屏） */
+static struct usbd_interface cdc_intf0;
+static struct usbd_interface cdc_intf1;
+
+static void usbd_cdc_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes);
+static void usbd_cdc_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes);
+
+static struct usbd_endpoint cdc_out_ep = {
+    .ep_addr = CDC_OUT_EP,
+    .ep_cb = usbd_cdc_bulk_out
+};
+static struct usbd_endpoint cdc_in_ep = {
+    .ep_addr = CDC_IN_EP,
+    .ep_cb = usbd_cdc_bulk_in
+};
+
 void webusb_hid_keyboard_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &webusb_hid_descriptor);
@@ -523,8 +600,16 @@ void webusb_hid_keyboard_init(uint8_t busid, uintptr_t reg_base)
     usbd_add_interface(busid, usbd_hid_init_intf(busid, &intf0, hid_keyboard_report_desc, HID_KEYBOARD_REPORT_DESC_SIZE));
     usbd_add_endpoint(busid, &hid_in_ep);
 
-    usbd_add_endpoint(busid, &webusb_in_ep);
+#if WEBUSB_TX_ENABLED
+    usbd_add_endpoint(busid, &webusb_in_ep);   /* 镜像发送开时才注册 WebUSB 端点，省 FIFO/带宽 */
     usbd_add_endpoint(busid, &webusb_out_ep);
+#endif
+
+    /* CDC ACM：注册两个接口 + BULK IN/OUT + INT 通知端点 */
+    usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &cdc_intf0));
+    usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &cdc_intf1));
+    usbd_add_endpoint(busid, &cdc_out_ep);
+    usbd_add_endpoint(busid, &cdc_in_ep);
 
     usbd_initialize(busid, reg_base, usbd_event_handler);
 }
@@ -545,3 +630,96 @@ void hid_keyboard_test(uint8_t busid)
     while (hid_state == HID_STATE_BUSY) {
     }
 }
+
+/* ===================== CDC 接收 PC 屏数据并绘制到 MCU 屏 =====================
+ * 协议（PC 端 Python 发送，小端字节序）：
+ *   帧头: magic(0xAA55, 2B) + width(2B) + height(2B) + len(4B) = 10 字节
+ *   负载: RGB565 像素字节流，len 字节（全量刷新时 = w*h*2）
+ * MCU 把负载直接写入外部SRAM显存 LCD_FRAMEBUFFER，收齐一整帧后由主循环
+ * 调 cdc_fb_service() -> fb_flush_to_lcd() 刷到 LCD GRAM。
+ * 说明：当前 MCU 屏为 480x800，Python 端应抓取同尺寸虚拟屏；如尺寸不符，
+ *       可在此按 w/h 做裁剪/缩放（本版先按整屏覆盖实现）。 */
+#define CDC_FRAME_MAGIC   0xAA55
+
+enum { CDC_RX_HDR = 0, CDC_RX_PAYLOAD } cdc_rx_state = CDC_RX_HDR;
+static uint8_t  cdc_hdr[10];
+static uint8_t  cdc_hdr_i;
+static uint32_t cdc_payload_rem;
+static uint32_t cdc_frame_off;   /* 当前帧内已收字节数，即写入显存的偏移 */
+volatile uint8_t cdc_frame_ready;
+
+/* 把收到的字节流喂入帧解析状态机（在 USB 中断回调中调用） */
+static void cdc_rx_feed(const uint8_t *data, uint32_t len)
+{
+    uint32_t i = 0;
+    while (i < len) {
+        if (cdc_rx_state == CDC_RX_HDR) {
+            /* 逐字节收集帧头，兼容跨包截断 */
+            cdc_hdr[cdc_hdr_i++] = data[i++];
+            if (cdc_hdr_i >= 10) {
+                uint16_t magic = (uint16_t)(cdc_hdr[0] | ((uint16_t)cdc_hdr[1] << 8));
+                if (magic != CDC_FRAME_MAGIC) {
+                    /* 同步丢失：滑动丢弃首字节后重试 */
+                    for (uint8_t k = 0; k < 9; k++) cdc_hdr[k] = cdc_hdr[k + 1];
+                    cdc_hdr_i = 9;
+                    continue;
+                }
+                /* 解析 width/height/len（小端），当前按整屏直接覆盖显存 */
+                (void)(cdc_hdr[2] | ((uint16_t)cdc_hdr[3] << 8));
+                (void)(cdc_hdr[4] | ((uint16_t)cdc_hdr[5] << 8));
+                cdc_payload_rem = (uint32_t)cdc_hdr[6] | ((uint32_t)cdc_hdr[7] << 8)
+                                | ((uint32_t)cdc_hdr[8] << 16) | ((uint32_t)cdc_hdr[9] << 24);
+                cdc_frame_off = 0;
+                cdc_rx_state  = CDC_RX_PAYLOAD;
+                cdc_hdr_i = 0;
+            }
+        } else { /* CDC_RX_PAYLOAD */
+            uint32_t chunk = len - i;
+            if (chunk > cdc_payload_rem) chunk = cdc_payload_rem;
+            /* RGB565 字节流按字节直接落入外部SRAM显存（小端一致，无需转换） */
+            memcpy((uint8_t *)LCD_FRAMEBUFFER + cdc_frame_off, data + i, chunk);
+            cdc_frame_off   += chunk;
+            cdc_payload_rem -= chunk;
+            i += chunk;
+            if (cdc_payload_rem == 0) {
+                cdc_frame_ready = 1;       /* 主循环据此刷屏 */
+                cdc_rx_state = CDC_RX_HDR;
+                cdc_hdr_i = 0;
+            }
+        }
+    }
+}
+
+static void usbd_cdc_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    (void)ep;
+    if (nbytes > 0) {
+        cdc_rx_feed(cdc_rx_buf, nbytes);
+    }
+    /* 重新挂载 OUT 传输，等待下一包 */
+    usbd_ep_start_read(busid, CDC_OUT_EP, cdc_rx_buf, CDC_RX_BUF_SIZE);
+}
+
+static void usbd_cdc_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    (void)busid; (void)ep;
+    /* CDC 回传（如需从 MCU 发数据给 PC）。当前仅处理 ZLP。 */
+    if ((nbytes % CDC_EP_MPS) == 0 && nbytes) {
+        usbd_ep_start_write(busid, CDC_IN_EP, NULL, 0);
+    }
+}
+
+/* 主循环调用：检测 CDC 整帧收齐后刷到 LCD GRAM */
+void cdc_fb_service(void)
+{
+    if (cdc_frame_ready) {
+        cdc_frame_ready = 0;
+        fb_flush_to_lcd();      /* LCD_FRAMEBUFFER -> LCD GRAM（整屏覆盖） */
+        fb_mark_dirty_all();    /* 若将来开启 WebUSB 镜像可同步；当前发送已禁用，无害 */
+    }
+}
+
+/* ---- CDC ACM 控制请求回调：无需自定义，直接复用 CherryUSB 的 __WEAK 默认实现 ----
+ * （默认 set/get_line_coding 会返回 2000000/8N1，set_dtr/rts/send_break 为空操作，
+ *   足以让系统 usbser 驱动把 CDC 识别为虚拟串口并收发数据。） */
+

@@ -810,7 +810,7 @@ void lcd_init(void)
         LCD_FSMC_BWTRX |= 1 << 8;       /* 数据保存时间(DATAST)为1个HCLK = 6ns */
     }
 
-    lcd_display_dir(0); /* 默认为竖屏 */
+    lcd_display_dir(1); /* 默认为竖屏 */
     LCD_BL(1);          /* 点亮背光 */
     lcd_clear(WHITE);
 }
