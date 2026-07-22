@@ -10,3 +10,4 @@
 /Project/MDK-ARM(uV5)/keil-build-viewer.log
 *.orig
 *.bak
+/py-script/__pycache__
