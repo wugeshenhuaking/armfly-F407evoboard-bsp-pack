@@ -5,7 +5,7 @@ import time
 import struct
 
 # ===== 配置区 =====
-COM_PORT = "COM4"          # 改成你 STM32 CDC 枚举出来的串口号
+COM_PORT = "COM5"          # 改成你 STM32 CDC 枚举出来的串口号
 BAUD = 2000000              # CDC 虚拟串口，波特率对 USB CDC 无实际意义，随便填
 VIRTUAL_MONITOR_INDEX = 2   # 改成你上一步查到的虚拟屏索引
 FRAME_MAGIC = 0xAA55

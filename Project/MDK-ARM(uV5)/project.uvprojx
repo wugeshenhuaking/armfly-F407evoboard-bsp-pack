@@ -940,6 +940,36 @@
               <FileType>5</FileType>
               <FilePath>..\..\User\user_task\task_usb.h</FilePath>
             </File>
+            <File>
+              <FileName>test_cdc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\user_task\test_cdc.c</FilePath>
+            </File>
+            <File>
+              <FileName>test_cdc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\user_task\test_cdc.h</FilePath>
+            </File>
+            <File>
+              <FileName>test_hid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\user_task\test_hid.c</FilePath>
+            </File>
+            <File>
+              <FileName>test_hid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\user_task\test_hid.h</FilePath>
+            </File>
+            <File>
+              <FileName>test_webusb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\user_task\test_webusb.c</FilePath>
+            </File>
+            <File>
+              <FileName>test_webusb.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\user_task\test_webusb.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
